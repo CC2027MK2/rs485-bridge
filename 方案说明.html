@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>B 机通过 A 机 485 接口操控设备 · 方案说明</title>
+<style>
+  :root{
+    --bg:#0e1116; --panel:#161b22; --panel2:#1b212a; --line:#2a323d;
+    --txt:#d7dee8; --dim:#8b98a9; --accent:#4c9aff; --ok:#3ddc97;
+    --warn:#f5a623; --err:#ff6b6b; --mono:"Cascadia Mono",Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);
+       font:15px/1.75 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif;
+       -webkit-font-smoothing:antialiased}
+  .wrap{max-width:1000px;margin:0 auto;padding:48px 28px 80px}
+
+  .kicker{font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--accent);
+          font-weight:600;margin-bottom:10px}
+  h1{font-size:28px;line-height:1.35;margin:0 0 12px;font-weight:650;letter-spacing:-.3px}
+  .sub{color:var(--dim);font-size:15px;margin:0 0 36px}
+
+  h2{font-size:17px;margin:44px 0 16px;font-weight:600;letter-spacing:.2px;
+     padding-bottom:10px;border-bottom:1px solid var(--line)}
+  h2 .n{color:var(--accent);font:600 13px var(--mono);margin-right:10px}
+  h3{font-size:14.5px;margin:24px 0 8px;font-weight:600;color:#e8eef7}
+
+  p{margin:10px 0}
+  ul,ol{margin:10px 0;padding-left:22px}
+  li{margin:6px 0}
+  code{font:13px var(--mono);background:#0b0e13;border:1px solid var(--line);
+       border-radius:3px;padding:1.5px 5px;color:#9fc7ff}
+
+  /* 结论卡 */
+  .verdict{background:linear-gradient(180deg,#16243a,#141a22);
+           border:1px solid #2d4570;border-radius:10px;padding:22px 24px;margin:0 0 8px}
+  .verdict .tag{display:inline-block;font-size:11px;letter-spacing:1.5px;
+    text-transform:uppercase;color:var(--accent);border:1px solid #2d4570;
+    border-radius:20px;padding:2px 10px;margin-bottom:12px;font-weight:600}
+  .verdict p{margin:8px 0;font-size:15.5px}
+  .verdict strong{color:#fff}
+
+  /* 表格 */
+  table{width:100%;border-collapse:collapse;margin:16px 0;font-size:13.5px}
+  th{text-align:left;font-weight:600;font-size:12px;letter-spacing:.6px;
+     text-transform:uppercase;color:var(--dim);padding:9px 12px;
+     border-bottom:1px solid var(--line);background:var(--panel2)}
+  td{padding:11px 12px;border-bottom:1px solid #1e242d;vertical-align:top}
+  tr:last-child td{border-bottom:0}
+  tbody tr:hover{background:#141920}
+  .rec{color:var(--ok);font-weight:600}
+  .no{color:var(--dim)}
+  .mid{color:var(--warn)}
+
+  /* 徽章 */
+  .b{display:inline-block;font:600 10.5px var(--mono);letter-spacing:.5px;
+     border-radius:3px;padding:1px 7px;vertical-align:1px;white-space:nowrap}
+  .b-meas{background:#10301f;color:var(--ok);border:1px solid #1d5a3a}
+  .b-calc{background:#2a2213;color:var(--warn);border:1px solid #5a4620}
+  .b-spec{background:#12243a;color:var(--accent);border:1px solid #274566}
+
+  /* 链路图 */
+  .chain{display:flex;align-items:stretch;gap:0;margin:26px 0 10px;flex-wrap:wrap}
+  .node{background:var(--panel);border:1px solid var(--line);border-radius:8px;
+        padding:14px 16px;min-width:132px;flex:1}
+  .node .t{font-weight:600;font-size:14px;margin-bottom:4px}
+  .node .d{font-size:12px;color:var(--dim);line-height:1.5}
+  .node.hi{border-color:#2d4570;background:linear-gradient(180deg,#16243a,#141a22)}
+  .link{display:flex;flex-direction:column;justify-content:center;
+        align-items:center;padding:0 10px;min-width:96px}
+  .link .lbl{font:11.5px var(--mono);color:var(--accent);white-space:nowrap}
+  .link .arw{color:var(--accent);opacity:.55;font:600 19px/1 "Segoe UI Symbol",sans-serif}
+  .link .sub2{font-size:10.5px;color:var(--dim);white-space:nowrap}
+  @media(max-width:760px){
+    .chain{flex-direction:column}
+    .link{transform:rotate(90deg);padding:10px 0;min-height:52px}
+    .link .lbl,.link .sub2{display:none}
+  }
+
+  .note{border-left:2px solid var(--accent);background:#12181f;
+        padding:12px 16px;margin:18px 0;border-radius:0 6px 6px 0;font-size:14px}
+  .note.warn{border-color:var(--warn)}
+  .note .h{font-weight:600;font-size:13px;color:var(--warn);margin-bottom:4px}
+
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:18px 0}
+  @media(max-width:760px){.grid2{grid-template-columns:1fr}}
+  .box{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px 16px}
+  .box .h{font-size:13px;font-weight:600;margin-bottom:6px;color:#e8eef7}
+  .box .v{font-size:13px;color:var(--dim);line-height:1.65}
+
+  .num{font:600 26px var(--mono);color:var(--accent);line-height:1.1}
+  .num small{font-size:12px;color:var(--dim);font-weight:400;margin-left:4px}
+
+  footer{margin-top:56px;padding-top:20px;border-top:1px solid var(--line);
+         font-size:12px;color:#5f6b7a;line-height:1.8}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="kicker">现场方案 · 2026-11-05</div>
+  <h1>B 机通过 A 机的 485 接口操控物联网设备</h1>
+  <p class="sub">A 机有 RS485，B 机没有，两者同一局域网。目标是让 B 机像插着 485 线一样操作总线上的设备。</p>
+
+  <div class="verdict">
+    <div class="tag">结论</div>
+    <p><strong>用软件网关，不需要买任何硬件。</strong>在 A 机跑一个单文件 Python 程序，把串口翻译成网络协议；B 机用标准 Modbus TCP 客户端、浏览器或 HTTP 直接访问。</p>
+    <p>代码已写好并跑通自测（12 项断言全过），放在 <code>rs485-bridge/</code> 目录。<strong>今天配好波特率就能通。</strong></p>
+  </div>
+
+  <h2><span class="n">01</span>三条路线，为什么选这条</h2>
+
+  <table>
+    <thead>
+      <tr><th style="width:20%">路线</th><th style="width:14%">成本</th><th style="width:16%">B 机改动</th><th>适用与代价</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong class="rec">A 机跑软件网关</strong><br><span class="no" style="font-size:12px">本次采用</span></td>
+        <td class="rec">0 元</td>
+        <td class="rec">改 IP 即可</td>
+        <td>Modbus TCP / 原始字节 / HTTP 三种出口都有。代价：A 机得开着，作为单点。</td>
+      </tr>
+      <tr>
+        <td><strong>虚拟串口对</strong><br><span class="no" style="font-size:12px">com0com + VSP</span></td>
+        <td class="mid">0–300 元</td>
+        <td class="mid">装驱动</td>
+        <td>B 机上的老软件无需改代码就以为在操作本地 COM 口。代价：要装内核驱动，64 位 Windows 驱动签名常出问题，串口独占，多客户端不可用。</td>
+      </tr>
+      <tr>
+        <td><strong>串口服务器</strong><br><span class="no" style="font-size:12px">USR-TCP232-410s 一类</span></td>
+        <td class="mid">200–800 元</td>
+        <td class="rec">改 IP 即可</td>
+        <td>不依赖 A 机，7×24 稳定，工业级隔离防雷。代价：要买、要接线、要配 IP。项目长期化时这是正解。</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    <div class="h">为什么不推荐先上虚拟串口</div>
+    它看起来最省事——B 机的软件完全不用改。但代价是装一个内核态驱动，在 Windows 上经常卡在驱动签名、蓝屏、串口冲突。而且它只能一对一，两个程序不能同时开。等确认了协议和用法，再考虑要不要上这层壳。
+  </div>
+
+  <h2><span class="n">02</span>数据怎么走</h2>
+
+  <div class="chain">
+    <div class="node">
+      <div class="t">B 机</div>
+      <div class="d">无 485 接口<br>Modbus TCP 客户端<br>或浏览器</div>
+    </div>
+    <div class="link">
+      <div class="lbl">TCP/IP</div>
+      <div class="arw">↔</div>
+      <div class="sub2">局域网 :502</div>
+    </div>
+    <div class="node hi">
+      <div class="t">A 机 · 网关</div>
+      <div class="d">MBAP ↔ RTU 转换<br>CRC 校验<br>总线串行化</div>
+    </div>
+    <div class="link">
+      <div class="lbl">USB-485</div>
+      <div class="arw">↔</div>
+      <div class="sub2">COM7 9600 8N1</div>
+    </div>
+    <div class="node">
+      <div class="t">RS485 总线</div>
+      <div class="d">半双工<br>手拉手菊花链<br>最多 32 节点</div>
+    </div>
+    <div class="link">
+      <div class="lbl">A/B 双绞</div>
+      <div class="arw">↔</div>
+      <div class="sub2">从站 1..N</div>
+    </div>
+    <div class="node">
+      <div class="t">设备</div>
+      <div class="d">电表 / 温控器<br>PLC / 传感器</div>
+    </div>
+  </div>
+
+  <p>关键点：<strong>B 机看到的是一台标准 Modbus TCP 设备</strong>，不是"远程串口"。网关负责把 TCP 的 MBAP 报文翻译成 485 上的 RTU 帧（加 CRC），把响应翻回来（去 CRC）。所以 B 机侧的软件、组态、脚本全部按 Modbus TCP 写，与现场总线无关。</p>
+
+  <h2><span class="n">03</span>三个需要你确认的分叉点</h2>
+
+  <div class="grid2">
+    <div class="box">
+      <div class="h">① 设备用什么协议</div>
+      <div class="v">Modbus RTU → 用 <code>--mode modbus</code>，最省事。<br>
+      私有协议 / 不确定 → 先用 <code>--mode raw</code> 抓一帧看。<br>
+      <strong>这个决定用哪个模式，其余照抄即可。</strong></div>
+    </div>
+    <div class="box">
+      <div class="h">② A 机能不能长期开着</div>
+      <div class="v">能 → 软件网关足够。<br>
+      不能（笔记本要带走）→ 直接买串口服务器，200 多块的 USR-TCP232-410s 就够用。</div>
+    </div>
+    <div class="box">
+      <div class="h">③ 有多少个客户端</div>
+      <div class="v">1–2 个 → 软件网关无压力。<br>
+      多人同时操作、需要权限隔离 → 串口服务器 + 交换机。</div>
+    </div>
+    <div class="box">
+      <div class="h">④ A 机是什么系统</div>
+      <div class="v">Windows → 按 README 直接跑。<br>
+      Linux / 树莓派 → 同一份代码，<code>--port /dev/ttyUSB0</code>，可做成 systemd 服务长期运行。</div>
+    </div>
+  </div>
+
+  <h2><span class="n">04</span>性能边界</h2>
+
+  <p>485 是半双工总线，同一时刻只能有一个事务。网关内部用全局锁把所有请求串行化——这是物理约束，不是实现缺陷。所以要先算清楚够不够用。</p>
+
+  <div class="grid2">
+    <div class="box">
+      <div class="num">30–70 <small>ms / 次事务</small></div>
+      <div class="v" style="margin-top:8px">9600bps 下，发 8 字节 + 设备响应 + 收 11 字节。<span class="b b-calc">计算值</span></div>
+    </div>
+    <div class="box">
+      <div class="num">15–30 <small>次 / 秒</small></div>
+      <div class="v" style="margin-top:8px">理论上限。要更快就提波特率，或一次多读几个寄存器。<span class="b b-calc">计算值</span></div>
+    </div>
+  </div>
+
+  <table>
+    <thead><tr><th style="width:34%">环节</th><th style="width:22%">9600bps 下的量级</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td>USB 轮询延迟</td><td>1–2 ms</td><td>已用 <code>set_latency_timer(1)</code> 从默认 16ms 压下来</td></tr>
+      <tr><td>发 8 字节请求</td><td>≈ 8.3 ms</td><td>10 bit/字节 ÷ 9600</td></tr>
+      <tr><td>设备处理 + 响应</td><td>10–50 ms</td><td>取决于设备，手册上一般有标注</td></tr>
+      <tr><td>收 11 字节响应</td><td>≈ 11.5 ms</td><td>同上</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note warn">
+    <div class="h">不要在总线上做高频轮询</div>
+    用 9600bps 每秒轮询 50 个寄存器，总线会饱和，表现为"越跑越慢、偶发超时"。正确做法是一次 FC03 读连续的 50 个（一帧搞定），而不是发 50 次单寄存器读。
+  </div>
+
+  <h2><span class="n">05</span>已经验证到什么程度</h2>
+
+  <p>没有真实 485 硬件，所以物理层没验。协议层用"假从站"跑通了端到端。</p>
+
+  <table>
+    <thead><tr><th style="width:42%">验证项</th><th style="width:16%">结果</th><th>证据</th></tr></thead>
+    <tbody>
+      <tr><td>MBAP ↔ RTU 双向转换</td><td class="rec">通过</td><td>FC03 读出 0x1234 / 0x5678 / 0x9ABC</td></tr>
+      <tr><td>事务 ID 原样回填</td><td class="rec">通过</td><td>0x1234 进、0x1234 出</td></tr>
+      <tr><td>FC01/03/04/05/06/16 读写</td><td class="rec">通过</td><td>写入 4321 后可读回</td></tr>
+      <tr><td>CRC 校验与异常码</td><td class="rec">通过</td><td>从站静默时返回 0x0B</td></tr>
+      <tr><td>连续 20 次事务无错帧</td><td class="rec">通过</td><td>总线锁未出现串帧</td></tr>
+      <tr><td>raw 模式字节透传</td><td class="rec">通过</td><td>发 6 字节收 6 字节，一致</td></tr>
+      <tr><td>REST API + Token 鉴权</td><td class="rec">通过</td><td>错误 Token 返回 401</td></tr>
+      <tr><td><strong>真实 485 电气层</strong></td><td class="mid">未验</td><td>需要你的转换器和设备，A/B 接线、终端电阻现场确认</td></tr>
+    </tbody>
+  </table>
+
+  <h2><span class="n">06</span>现场三个必查项</h2>
+
+  <p>这三个问题占 485 现场故障的九成，且跟软件无关：</p>
+  <ol>
+    <li><strong>A/B 线接反</strong>——现象是完全无响应或收到乱码。断电换线，两秒的事。有些厂家把 A 标成 D+、B 标成 D−，甚至有反着标的。</li>
+    <li><strong>没接共地</strong>——设备电源不同、地电位差大时必须连 GND，否则时好时坏、一长就丢包。</li>
+    <li><strong>拓扑与终端电阻</strong>——必须手拉手菊花链，不能星形分叉；超过 50 米或波特率高于 38400，最远两端各加 120Ω。</li>
+  </ol>
+
+  <h2><span class="n">07</span>安全</h2>
+  <p>网关的本质是<strong>把一条 485 总线的写权限暴露到网络上</strong>。任何能连上端口的人都能读写总线上的所有设备，请按这个前提部署。</p>
+
+  <p>默认配置已收紧的项目（每一条都有对应的自动化测试，见 <code>sec_test.py</code>）：</p>
+  <table>
+    <thead><tr><th style="width:24%">项目</th><th>默认行为</th></tr></thead>
+    <tbody>
+      <tr><td>CORS</td><td>默认<strong>不发送</strong> <code>Access-Control-Allow-Origin</code>，第三方网页无法跨域调用</td></tr>
+      <tr><td>界面</td><td>内置控制台走 <code>/panel</code> 同源提供，无需为用界面而放开跨域</td></tr>
+      <tr><td>Token</td><td><code>hmac.compare_digest</code> 常量时间比较，避免逐字节试探</td></tr>
+      <tr><td>请求体</td><td>上限 64KB，超限直接拒绝</td></tr>
+      <tr><td>错误响应</td><td>只回通用描述，内部异常仅写本地日志</td></tr>
+      <tr><td>启动横幅</td><td>Token 掩码显示，避免截图带出完整口令</td></tr>
+    </tbody>
+  </table>
+
+  <p>最小暴露的启动方式：</p>
+  <ul>
+    <li><code>--listen 192.168.1.100</code> —— 只监听内网那块网卡</li>
+    <li><code>--allow 192.168.1.50</code> —— 只允许指定 B 机</li>
+    <li><code>--token 换成你的长口令</code> —— HTTP 模式加口令</li>
+  </ul>
+  <p>要跨公网访问，走 VPN 或 SSH 隧道，<strong>不要把 502 端口直接映射到公网</strong>。Modbus 协议本身没有任何认证机制。</p>
+
+  <div class="note warn">
+    <div class="h">已知局限</div>
+    不做 TLS，HTTP 模式口令与数据在局域网内明文传输，同一广播域可被嗅探；IP 白名单基于源地址判断，不能防御已控制内网的攻击者；无速率限制。需要更强防护请在前面套 Nginx/Caddy 反代或走 VPN。
+  </div>
+
+  <footer>
+    方案与代码：本地实测（2026-11-05，Windows 11 / Python 3.13 / pyserial 3.5）<br>
+    性能数字为按波特率与协议开销计算的理论值，非实测；实测部分见第 05 节。<br>
+    协议依据：Modbus Application Protocol V1.1b3、Modbus over Serial Line V1.02。<br>
+    交付目录：<code>rs485-bridge/</code> · 操作用 <code>README.md</code>，协议自测 <code>selftest.py</code>，安全回归 <code>sec_test.py</code>
+  </footer>
+</div>
+</body>
+</html>

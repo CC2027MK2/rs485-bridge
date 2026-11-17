@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RS485 远程操控台</title>
+<style>
+  :root{
+    --bg:#0e1116; --panel:#161b22; --panel2:#1c222b; --line:#2a323d;
+    --txt:#d7dee8; --dim:#8b98a9; --accent:#4c9aff; --ok:#3ddc97;
+    --err:#ff6b6b; --warn:#f5a623; --mono:"Cascadia Mono",Consolas,"JetBrains Mono",monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);
+       font:14px/1.6 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif}
+  header{display:flex;align-items:center;gap:14px;padding:14px 20px;
+         background:var(--panel);border-bottom:1px solid var(--line)}
+  header h1{font-size:15px;font-weight:600;margin:0;letter-spacing:.3px}
+  .dot{width:8px;height:8px;border-radius:50%;background:#4a5563;display:inline-block;
+       margin-right:6px;transition:.2s}
+  .dot.on{background:var(--ok);box-shadow:0 0 8px var(--ok)}
+  .dot.err{background:var(--err);box-shadow:0 0 8px var(--err)}
+  #status{margin-left:auto;font-size:12px;color:var(--dim);font-family:var(--mono)}
+
+  .conn{display:flex;flex-wrap:wrap;gap:10px;padding:12px 20px;
+        background:var(--panel2);border-bottom:1px solid var(--line);align-items:center}
+  .conn label{font-size:12px;color:var(--dim);display:flex;align-items:center;gap:6px}
+
+  main{display:grid;grid-template-columns:1.25fr 1fr;gap:16px;padding:16px 20px 40px;align-items:start}
+  @media(max-width:900px){main{grid-template-columns:1fr}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  .card h2{margin:0;padding:10px 14px;font-size:12px;font-weight:600;letter-spacing:.8px;
+           text-transform:uppercase;color:var(--dim);background:var(--panel2);
+           border-bottom:1px solid var(--line)}
+  .card .body{padding:14px}
+
+  .row{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:12px}
+  .field{display:flex;flex-direction:column;gap:4px}
+  .field span{font-size:11px;color:var(--dim);letter-spacing:.3px}
+  input,select{background:#0b0e13;border:1px solid var(--line);color:var(--txt);
+    border-radius:5px;padding:6px 8px;font:13px var(--mono);outline:none;transition:.15s}
+  input:focus,select:focus{border-color:var(--accent)}
+  input.w{width:88px}
+
+  button{background:var(--accent);color:#06101f;border:0;border-radius:5px;
+    padding:7px 16px;font-size:13px;font-weight:600;cursor:pointer;transition:.15s}
+  button:hover{filter:brightness(1.1)}
+  button:active{transform:translateY(1px)}
+  button.ghost{background:transparent;color:var(--txt);border:1px solid var(--line)}
+  button.ghost:hover{border-color:var(--accent);color:var(--accent)}
+  button:disabled{opacity:.45;cursor:not-allowed}
+
+  table{width:100%;border-collapse:collapse;font:12.5px var(--mono)}
+  th{text-align:left;color:var(--dim);font-weight:500;font-size:11px;
+     letter-spacing:.5px;padding:6px 8px;border-bottom:1px solid var(--line)}
+  td{padding:5px 8px;border-bottom:1px solid #1e242d}
+  tr:last-child td{border-bottom:0}
+  td.v{color:var(--ok)}
+  td.h{color:var(--accent)}
+  .empty{color:var(--dim);font-size:12.5px;padding:10px 0}
+
+  pre{margin:0;background:#0b0e13;border:1px solid var(--line);border-radius:5px;
+      padding:10px;font:12.5px/1.7 var(--mono);white-space:pre-wrap;
+      word-break:break-all;min-height:64px;color:var(--dim)}
+  pre .tx{color:var(--accent)} pre .rx{color:var(--ok)} pre .er{color:var(--err)}
+
+  .hint{font-size:11.5px;color:var(--dim);margin-top:8px;line-height:1.5}
+  .hint code{background:#0b0e13;border:1px solid var(--line);border-radius:3px;
+             padding:1px 5px;font:11.5px var(--mono);color:var(--accent)}
+  .chk{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--dim)}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>RS485 远程操控台</h1>
+  <span id="status"><span class="dot" id="dot"></span>未连接</span>
+</header>
+
+<div class="conn">
+  <label>A 机 IP<input id="host" placeholder="192.168.1.100" style="width:140px"></label>
+  <label>端口<input id="port" value="8080" style="width:70px"></label>
+  <label>Token<input id="token" placeholder="可留空" style="width:110px"></label>
+  <button onclick="probe()">测试连接</button>
+  <button class="ghost" onclick="saveCfg()">保存</button>
+</div>
+
+<main>
+  <section class="card">
+    <h2>读取</h2>
+    <div class="body">
+      <div class="row">
+        <label class="field"><span>从站</span><input id="r_unit" class="w" value="1"></label>
+        <label class="field"><span>功能码</span>
+          <select id="r_fc">
+            <option value="3">03 保持寄存器</option>
+            <option value="4">04 输入寄存器</option>
+            <option value="1">01 线圈</option>
+            <option value="2">02 离散输入</option>
+          </select></label>
+        <label class="field"><span>起始地址</span><input id="r_addr" class="w" value="0"></label>
+        <label class="field"><span>数量</span><input id="r_count" class="w" value="8"></label>
+        <label class="field"><span>倍率</span><input id="r_scale" class="w" placeholder="1"></label>
+        <label class="field"><span>&nbsp;</span><button onclick="doRead()">读取</button></label>
+      </div>
+      <div class="row" style="margin-bottom:8px">
+        <label class="chk"><input type="checkbox" id="auto" onchange="toggleAuto()"> 自动刷新</label>
+        <select id="interval" style="padding:3px 6px">
+          <option value="1000">1 秒</option>
+          <option value="2000" selected>2 秒</option>
+          <option value="5000">5 秒</option>
+        </select>
+        <span id="r_meta" style="margin-left:auto;font:12px var(--mono);color:var(--dim)"></span>
+      </div>
+      <table>
+        <thead><tr><th>地址</th><th>HEX</th><th>DEC</th><th>换算值</th></tr></thead>
+        <tbody id="r_body"><tr><td colspan="4" class="empty">尚未读取</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>写入</h2>
+    <div class="body">
+      <div class="row">
+        <label class="field"><span>从站</span><input id="w_unit" class="w" value="1"></label>
+        <label class="field"><span>功能码</span>
+          <select id="w_fc">
+            <option value="6">06 写寄存器</option>
+            <option value="5">05 写线圈</option>
+            <option value="16">16 批量写寄存器</option>
+          </select></label>
+        <label class="field"><span>地址</span><input id="w_addr" class="w" value="0"></label>
+        <label class="field"><span>值</span><input id="w_val" class="w" value="0"></label>
+        <label class="field"><span>&nbsp;</span><button onclick="doWrite()">写入</button></label>
+      </div>
+      <div class="hint">批量写（16）在「值」里填多个数，用逗号分隔，如 <code>100,200,300</code>。
+        写线圈（05）填 1 或 0。</div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>原始帧收发</h2>
+    <div class="body">
+      <div class="row">
+        <input id="hex" placeholder="01 03 00 00 00 03 05 CB" style="flex:1;min-width:220px">
+        <button onclick="doRaw()">发送</button>
+      </div>
+      <pre id="raw_out">发送十六进制帧，网关会原样转发到 RS485 总线并返回设备响应。</pre>
+      <div class="hint">常用于调试私有协议、抄读 DL/T645 电表、验证接线与波特率。</div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>网关状态</h2>
+    <div class="body">
+      <pre id="sys">点击「测试连接」查询。</pre>
+    </div>
+  </section>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+let timer = null, ok = false;
+
+function cfg() {
+  return {
+    host: $('host').value.trim() || '127.0.0.1',
+    port: $('port').value.trim() || '8080',
+    token: $('token').value.trim()
+  };
+}
+function saveCfg() {
+  localStorage.setItem('rs485cfg', JSON.stringify(cfg()));
+  setStatus('配置已保存', 'ok');
+}
+function loadCfg() {
+  // 支持用 URL 参数预置：panel.html?host=192.168.1.100&port=8080&token=xxx
+  const q = new URLSearchParams(location.search);
+  if (q.get('host')) $('host').value = q.get('host');
+  if (q.get('port')) $('port').value = q.get('port');
+  if (q.get('token')) $('token').value = q.get('token');
+  try {
+    const c = JSON.parse(localStorage.getItem('rs485cfg') || '{}');
+    if (c.host && !q.get('host')) $('host').value = c.host;
+    if (c.port && !q.get('port')) $('port').value = c.port;
+    if (c.token && !q.get('token')) $('token').value = c.token;
+  } catch (e) {}
+
+  // 若本页由网关自身托管（http:// 且路径为 /panel），直接同源访问，
+  // 用户无需填写 IP，也不涉及跨域。
+  if (location.protocol === 'http:' && /\/panel(\.html)?$/.test(location.pathname)) {
+    $('host').value = location.hostname;
+    $('port').value = location.port || '80';
+    $('host').disabled = true;
+    $('port').disabled = true;
+    sameOrigin = true;
+  }
+}
+let sameOrigin = false;
+function setStatus(msg, kind) {
+  $('status').innerHTML = '<span class="dot ' + (kind === 'ok' ? 'on' : kind === 'err' ? 'err' : '') + '"></span>' + msg;
+  ok = kind === 'ok';
+}
+function base() {
+  if (sameOrigin) return location.origin;
+  const c = cfg();
+  return `http://${c.host}:${c.port}`;
+}
+async function api(path, body) {
+  const c = cfg();
+  const opt = { method: body ? 'POST' : 'GET', headers: { 'Content-Type': 'application/json' } };
+  if (c.token) opt.headers['X-Token'] = c.token;
+  if (body) opt.body = JSON.stringify(body);
+  const t0 = performance.now();
+  const r = await fetch(base() + path, opt);
+  const ms = (performance.now() - t0).toFixed(0);
+  if (!r.ok && r.status === 401) throw new Error('Token 无效 (401)');
+  const j = await r.json();
+  j._ms = ms;
+  return j;
+}
+
+async function probe() {
+  try {
+    const j = await api('/api/status');
+    setStatus('已连接 · ' + j.port + ' @ ' + j.baud, 'ok');
+    $('sys').textContent = JSON.stringify(j, null, 2);
+    doRead();
+  } catch (e) {
+    setStatus('连接失败：' + e.message, 'err');
+    $('sys').textContent = '无法连接 ' + base() + '\n' + e.message;
+  }
+}
+
+async function doRead() {
+  const scale = $('r_scale').value.trim();
+  const body = {
+    unit: +$('r_unit').value, fc: +$('r_fc').value,
+    addr: +$('r_addr').value, count: +$('r_count').value
+  };
+  if (scale) body.scale = parseFloat(scale);
+  try {
+    const j = await api('/api/modbus', body);
+    if (!j.ok) throw new Error(j.error || '读取失败');
+    renderRead(j, body);
+    setStatus('读取成功 · ' + j._ms + 'ms', 'ok');
+  } catch (e) {
+    setStatus('读取失败：' + e.message, 'err');
+  }
+}
+
+function renderRead(j, body) {
+  const tb = $('r_body');
+  tb.innerHTML = '';
+  const isBits = body.fc === 1 || body.fc === 2;
+  const arr = isBits ? j.bits : j.regs;
+  if (!arr || !arr.length) { tb.innerHTML = '<tr><td colspan="4" class="empty">无数据</td></tr>'; return; }
+  arr.forEach((v, i) => {
+    const tr = document.createElement('tr');
+    const addr = body.addr + i;
+    if (isBits) {
+      tr.innerHTML = `<td>${addr}</td><td class="h">${v}</td><td class="v">${v ? 'ON' : 'OFF'}</td><td>${v}</td>`;
+    } else {
+      const hex = v.toString(16).toUpperCase().padStart(4, '0');
+      const sc = (j.values && j.values[i] !== undefined) ? j.values[i] : '';
+      tr.innerHTML = `<td>${addr}</td><td class="h">0x${hex}</td><td class="v">${v}</td><td>${sc}</td>`;
+    }
+    tb.appendChild(tr);
+  });
+  $('r_meta').textContent = `${arr.length} 项 · ${j._ms}ms`;
+}
+
+async function doWrite() {
+  const fc = +$('w_fc').value;
+  const body = { unit: +$('w_unit').value, fc: fc, addr: +$('w_addr').value };
+  if (fc === 16) {
+    body.values = $('w_val').value.split(/[,，\s]+/).filter(Boolean).map(Number);
+  } else {
+    body.value = +$('w_val').value;
+  }
+  try {
+    const j = await api('/api/modbus', body);
+    if (!j.ok) throw new Error(j.error || '写入未确认');
+    setStatus('写入成功 · ' + j._ms + 'ms', 'ok');
+    if ($('auto').checked) doRead();
+  } catch (e) {
+    setStatus('写入失败：' + e.message, 'err');
+  }
+}
+
+async function doRaw() {
+  const h = $('hex').value.trim();
+  if (!h) return;
+  $('raw_out').innerHTML = '发送中 ...';
+  try {
+    const j = await api('/api/raw', { hex: h });
+    if (!j.ok) throw new Error(j.error || '失败');
+    $('raw_out').innerHTML =
+      `<span class="tx">TX ▸ ${j.tx}</span>\n` +
+      `<span class="rx">RX ◂ ${j.rx || '(无响应)'}</span>\n` +
+      `<span style="color:#8b98a9">${j.rx_len} 字节 · ${j.elapsed_ms}ms</span>`;
+    setStatus('帧发送完成 · ' + j.elapsed_ms + 'ms', 'ok');
+  } catch (e) {
+    $('raw_out').innerHTML = `<span class="er">错误：${e.message}</span>`;
+    setStatus('发送失败：' + e.message, 'err');
+  }
+}
+
+function toggleAuto() {
+  if (timer) { clearInterval(timer); timer = null; }
+  if ($('auto').checked) {
+    doRead();
+    timer = setInterval(doRead, +$('interval').value);
+  }
+}
+$('interval').onchange = () => { if ($('auto').checked) toggleAuto(); };
+
+loadCfg();
+addEventListener('load', () => {
+  // 有预置配置时才自动连，避免首次打开就报红
+  const q = new URLSearchParams(location.search);
+  if (q.get('host') || localStorage.getItem('rs485cfg')) probe();
+});
+</script>
+</body>
+</html>
