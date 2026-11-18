@@ -1,0 +1,42 @@
+name: selftest
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  selftest:
+    name: protocol + security regression (py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: [ "3.9", "3.12" ]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install pyserial
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install "pyserial>=3.4"
+
+      # selftest.py 用一个 TCP 假从站冒充 485 总线（socket://127.0.0.1:160xx），
+      # 不需要任何真实硬件；端口全部 >= 1501，非 root 也能 bind。
+      - name: Protocol self-test (12 checks, no hardware)
+        run: python selftest.py
+
+      - name: Security regression (CORS / token / body limit / panel / error leakage)
+        run: python sec_test.py
