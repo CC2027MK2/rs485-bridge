@@ -13,12 +13,19 @@ permissions:
 jobs:
   selftest:
     name: protocol + security regression (py${{ matrix.python-version }})
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 10
     strategy:
       fail-fast: false
+      # 为什么要指定 os：ubuntu-latest 现在指向 26.04，setup-python 在那上面
+      # 已经拿不到 3.9 的构建（报 "The version '3.9' ... was not found for Ubuntu 26.04"），
+      # 所以最低版本放到 22.04 上跑，最新版本继续跑 ubuntu-latest。
       matrix:
-        python-version: [ "3.9", "3.12" ]
+        include:
+          - python-version: "3.9"
+            os: ubuntu-22.04
+          - python-version: "3.12"
+            os: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
