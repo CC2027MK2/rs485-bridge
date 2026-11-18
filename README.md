@@ -1,5 +1,10 @@
 # RS485 网络网关
 
+<p>
+  <a href="https://github.com/CC2027MK2/rs485-bridge/actions/workflows/selftest.yml"><img src="https://img.shields.io/github/actions/workflow/status/CC2027MK2/rs485-bridge/selftest.yml?label=selftest" alt="selftest"></a>
+  <img src="https://img.shields.io/github/license/CC2027MK2/rs485-bridge?label=license&color=blue" alt="license">
+</p>
+
 让没有 485 接口的 B 机，通过同一局域网里 A 机的 485 接口，操控总线上的物联网设备。
 
 零硬件成本，纯 Python，一个文件，依赖只有 `pyserial`。
